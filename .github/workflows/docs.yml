@@ -14,13 +14,13 @@ jobs:
       pull-requests: write
     name: Build and Deploy Job
     steps:
-      - uses: actions/checkout@latest
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@latest
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12
 
