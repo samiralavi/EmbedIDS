@@ -7,8 +7,8 @@ theme:
   name: material
   custom_dir: docs/overrides
   language: en
-  logo: images/embedIDS_logo.png
-  favicon: images/favicon.png
+  logo: assets/images/embedIDS_logo.png
+  favicon: assets/images/favicon.png
   icon:
     repo: fontawesome/brands/github
   palette:
@@ -37,7 +37,6 @@ theme:
   features:
     - navigation.sections
     - navigation.tabs
-    - navigation.sections
     - navigation.top
     - navigation.footer
     - header.autohide
@@ -118,14 +117,16 @@ plugins:
       branch: main
 nav:
   - "index.md"
+  - "quickstart.md"
+  - "tutorial.md"
   - Blog:
     - blog/index.md
 
 extra_css:
-  - stylesheets/extra.css
+  - assets/stylesheets/extra.css
 
 extra_javascript:
-  - javascripts/extra.js
+  - assets/javascripts/extra.js
 
 copyright: Copyright &copy; 2025 Seyed Amir Alavi and Mahyar Abbaspour –
   <a href="#__consent">Change cookie settings</a>
