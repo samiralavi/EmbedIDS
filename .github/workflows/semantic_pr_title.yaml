@@ -2,7 +2,7 @@ name: Check Pull Request Title
 
 on:
   pull_request:
-    branches: [main, feat/*]
+    branches: [main, feat/*, fix/*]
 
 jobs:
   semantic_pull_request:

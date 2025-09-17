@@ -95,11 +95,13 @@ markdown_extensions:
   - toc:
       permalink: true
       toc_depth: 2
+  - pymdownx.blocks.caption
 
 plugins:
   - search
   - mike
   - social
+  - glightbox
   - git-revision-date-localized:
       enable_creation_date: true
   - git-committers:
