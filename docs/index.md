@@ -7,7 +7,8 @@ hide:
 
 # EmbedIDS: Open Source Intrusion Detection System (IDS) for Embedded Systems
 
-![EmbedIDS Logo](assets/images/embedIDS_logo_text.png)
+![EmbedIDS Logo](assets/images/embedIDS_logo_text.png#only-light)
+![EmbedIDS Logo](assets/images/embedIDS_logo_text.jpeg#only-dark)
 
 **🚀 New to EmbedIDS?** 
 - **[Quick Start Guide](quickstart.md)** - Get running in 5 minutes
