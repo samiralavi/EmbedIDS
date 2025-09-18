@@ -8,35 +8,33 @@ int main() {
     // 1. Allocate memory for metric history
     static embedids_metric_datapoint_t cpu_history[50];
     
-    // 2. Configure CPU metric
-    embedids_metric_t cpu_metric;
-    memset(&cpu_metric, 0, sizeof(cpu_metric));
-    strncpy(cpu_metric.name, "cpu_usage", EMBEDIDS_MAX_METRIC_NAME_LEN - 1);
-    cpu_metric.type = EMBEDIDS_METRIC_TYPE_PERCENTAGE;
-    cpu_metric.history = cpu_history;
-    cpu_metric.max_history_size = 50;
-    cpu_metric.enabled = true;
-    
-    // 3. Configure threshold algorithm (alert if CPU > 80%)
-    embedids_algorithm_t threshold_algo;
-    memset(&threshold_algo, 0, sizeof(threshold_algo));
-    threshold_algo.type = EMBEDIDS_ALGORITHM_THRESHOLD;
-    threshold_algo.enabled = true;
-    threshold_algo.config.threshold.max_threshold.f32 = 80.0f;
-    threshold_algo.config.threshold.check_max = true;
-    
-    // 4. Create metric configuration
+    // 2. Configure CPU metric using new init API
     embedids_metric_config_t metric_config;
+    embedids_algorithm_t algo_storage[1];
     memset(&metric_config, 0, sizeof(metric_config));
-    metric_config.metric = cpu_metric;
-    metric_config.algorithms[0] = threshold_algo;
+    embedids_metric_init(&metric_config,
+                         "cpu_usage",
+                         EMBEDIDS_METRIC_TYPE_PERCENTAGE,
+                         cpu_history,
+                         50,
+                         algo_storage,
+                         1);
+    // 3. Configure threshold algorithm (alert if CPU > 80%)
     metric_config.num_algorithms = 1;
+    metric_config.algorithms[0] = (embedids_algorithm_t){
+        .type = EMBEDIDS_ALGORITHM_THRESHOLD,
+        .enabled = true,
+        .config.threshold = {
+            .max_threshold.f32 = 80.0f,
+            .check_max = true,
+            .check_min = false
+        }
+    };
     
     // 5. Create system configuration
     embedids_system_config_t system_config;
     memset(&system_config, 0, sizeof(system_config));
     system_config.metrics = &metric_config;
-    system_config.max_metrics = 1;
     system_config.num_active_metrics = 1;
     
     // 6. Initialize EmbedIDS context and system

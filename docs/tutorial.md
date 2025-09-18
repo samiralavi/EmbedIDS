@@ -26,173 +26,105 @@ EmbedIDS uses a stateless design where all library state is managed through a us
 ```c
 // Create and initialize a context
 embedids_context_t context;
-memset(&context, 0, sizeof(context));
-
-// Pass context to all API calls
-embedids_init(&context, &config);
-embedids_add_datapoint(&context, "metric_name", value, timestamp);
-embedids_analyze_metric(&context, "metric_name");
-embedids_cleanup(&context);
-```
-
-## Getting Started
-
-### Installation
-
-1. **Clone the repository:**
-```bash
-git clone https://github.com/samiralavi/EmbedIDS.git
-cd EmbedIDS
-```
-
-2. **Build the library:**
-```bash
-mkdir build && cd build
-cmake ..
-make
-```
-
-3. **Include in your project:**
-```c
-#include "embedids.h"
-```
-
-### Basic Project Structure
-```
-your_project/
-├── src/
-│   └── main.c
-├── include/
-│   └── embedids.h
-├── lib/
-│   └── libembedids.a
-└── CMakeLists.txt
-```
-
-## Basic Usage
-
-### Step 1: Initialize EmbedIDS
-
-The simplest way to get started is with an empty configuration:
-
 ```c
 #include <stdio.h>
 #include <string.h>
-#include "embedids.h"
-
-int main() {
-    // Initialize context and empty configuration
-    embedids_context_t context;
-    memset(&context, 0, sizeof(context));
-    
-    embedids_system_config_t config;
-    memset(&config, 0, sizeof(config));
-    
-    embedids_result_t result = embedids_init(&context, &config);
-    if (result != EMBEDIDS_OK) {
-        printf("Failed to initialize EmbedIDS: %d\n", result);
-        return 1;
-    }
-    
-    printf("EmbedIDS v%s initialized successfully!\n", embedids_get_version());
-    
-    // Clean up
-    embedids_cleanup(&context);
-    return 0;
-}
-```
-
-### Step 2: Basic Metric Monitoring
-
-Let's create a simple CPU usage monitor:
-
-```c
-#include <stdio.h>
-#include <string.h>
+#include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
 #include "embedids.h"
 
-int main() {
-    // Step 1: Allocate memory for metric history
-    static embedids_metric_datapoint_t cpu_history[100];
-    
-    // Step 2: Configure the metric
-    embedids_metric_t cpu_metric;
-    memset(&cpu_metric, 0, sizeof(cpu_metric));
-    strncpy(cpu_metric.name, "cpu_usage", EMBEDIDS_MAX_METRIC_NAME_LEN - 1);
-    cpu_metric.type = EMBEDIDS_METRIC_TYPE_PERCENTAGE;
-    cpu_metric.history = cpu_history;
-    cpu_metric.max_history_size = 100;
-    cpu_metric.enabled = true;
-    
-    // Step 3: Configure threshold algorithm
-    embedids_algorithm_t threshold_algo;
-    memset(&threshold_algo, 0, sizeof(threshold_algo));
-    threshold_algo.type = EMBEDIDS_ALGORITHM_THRESHOLD;
-    threshold_algo.enabled = true;
-    threshold_algo.config.threshold.max_threshold.f32 = 80.0f;  // 80% threshold
-    threshold_algo.config.threshold.check_max = true;
-    threshold_algo.config.threshold.check_min = false;
-    
-    // Step 4: Create metric configuration
-    embedids_metric_config_t metric_config;
-    memset(&metric_config, 0, sizeof(metric_config));
-    metric_config.metric = cpu_metric;
-    metric_config.algorithms[0] = threshold_algo;
-    metric_config.num_algorithms = 1;
-    
-    // Step 5: Create system configuration
-    embedids_system_config_t system_config;
-    memset(&system_config, 0, sizeof(system_config));
-    system_config.metrics = &metric_config;
-    system_config.max_metrics = 1;
-    system_config.num_active_metrics = 1;
-    
-    // Step 6: Initialize EmbedIDS context and system
-    embedids_context_t context;
-    memset(&context, 0, sizeof(context));
-    
-    embedids_result_t result = embedids_init(&context, &system_config);
-    if (result != EMBEDIDS_OK) {
-        printf("Failed to initialize EmbedIDS: %d\n", result);
+// Simulated sensor data helpers
+static float get_cpu_usage(void)    { return 20.0f + (rand() % 60); }
+static float get_memory_usage(void) { return 30.0f + (rand() % 50); }
+static float get_network_packets(void) { return 100.0f + (rand() % 500); }
+
+int main(void) {
+    srand((unsigned int)time(NULL));
+
+    // User memory (history + algorithms per metric)
+    static embedids_metric_datapoint_t cpu_history[50];
+    static embedids_metric_datapoint_t memory_history[50];
+    static embedids_metric_datapoint_t network_history[30];
+
+    static embedids_algorithm_t cpu_algorithms[1];
+    static embedids_algorithm_t memory_algorithms[1];
+    static embedids_algorithm_t network_algorithms[1];
+
+    // Configure algorithms
+    memset(cpu_algorithms, 0, sizeof(cpu_algorithms));
+    embedids_algorithm_init(&cpu_algorithms[0], EMBEDIDS_ALGORITHM_THRESHOLD, true);
+    cpu_algorithms[0].config.threshold.max_threshold.f32 = 75.0f;
+    cpu_algorithms[0].config.threshold.check_max = true;
+
+    memset(memory_algorithms, 0, sizeof(memory_algorithms));
+    embedids_algorithm_init(&memory_algorithms[0], EMBEDIDS_ALGORITHM_TREND, true);
+    memory_algorithms[0].config.trend.window_size = 5;
+    memory_algorithms[0].config.trend.max_slope = 10.0f;
+
+    memset(network_algorithms, 0, sizeof(network_algorithms));
+    embedids_algorithm_init(&network_algorithms[0], EMBEDIDS_ALGORITHM_THRESHOLD, true);
+    network_algorithms[0].config.threshold.max_threshold.f32 = 500.0f;
+    network_algorithms[0].config.threshold.check_max = true;
+
+    // Metric configs
+    embedids_metric_config_t cpu_config; memset(&cpu_config, 0, sizeof(cpu_config));
+    embedids_metric_config_t memory_config; memset(&memory_config, 0, sizeof(memory_config));
+    embedids_metric_config_t network_config; memset(&network_config, 0, sizeof(network_config));
+
+    embedids_metric_init(&cpu_config, "cpu_usage", EMBEDIDS_METRIC_TYPE_PERCENTAGE,
+                         cpu_history, (uint32_t)(sizeof(cpu_history)/sizeof(cpu_history[0])),
+                         cpu_algorithms, (uint32_t)(sizeof(cpu_algorithms)/sizeof(cpu_algorithms[0])));
+    cpu_config.num_algorithms = 1;
+
+    embedids_metric_init(&memory_config, "memory_usage", EMBEDIDS_METRIC_TYPE_PERCENTAGE,
+                         memory_history, (uint32_t)(sizeof(memory_history)/sizeof(memory_history[0])),
+                         memory_algorithms, (uint32_t)(sizeof(memory_algorithms)/sizeof(memory_algorithms[0])));
+    memory_config.num_algorithms = 1;
+
+    embedids_metric_init(&network_config, "network_packets", EMBEDIDS_METRIC_TYPE_FLOAT,
+                         network_history, (uint32_t)(sizeof(network_history)/sizeof(network_history[0])),
+                         network_algorithms, (uint32_t)(sizeof(network_algorithms)/sizeof(network_algorithms[0])));
+    network_config.num_algorithms = 1;
+
+    // System configuration array
+    embedids_metric_config_t metrics[3] = { cpu_config, memory_config, network_config };
+
+    embedids_system_config_t system_config; memset(&system_config, 0, sizeof(system_config));
+    system_config.metrics = metrics;
+    system_config.num_active_metrics = 3;
+
+    embedids_context_t context; memset(&context, 0, sizeof(context));
+    if (embedids_init(&context, &system_config) != EMBEDIDS_OK) {
+        printf("Init failed\n");
         return 1;
     }
-    
-    printf("CPU monitoring started (threshold: 80%%)\n");
-    
-    // Step 7: Monitoring loop
-    for (int i = 0; i < 10; i++) {
-        // Simulate CPU usage data
-        float cpu_usage = 30.0f + (i * 7.0f);  // Gradually increasing
-        
-        // Add data point
-        embedids_metric_value_t value = {.f32 = cpu_usage};
-        uint64_t timestamp = (uint64_t)time(NULL) * 1000;
-        
-        result = embedids_add_datapoint(&context, &context, "cpu_usage", value, timestamp);
-        if (result != EMBEDIDS_OK) {
-            printf("Failed to add data point: %d\n", result);
-            continue;
-        }
-        
-        // Analyze the metric
-        result = embedids_analyze_metric(&context, &context, "cpu_usage");
-        if (result == EMBEDIDS_OK) {
-            printf("Iteration %d: CPU %.1f%% - NORMAL\n", i+1, cpu_usage);
-        } else {
-            printf("Iteration %d: CPU %.1f%% - ALERT! Threshold exceeded\n", i+1, cpu_usage);
-        }
-        
-        sleep(1);
+
+    printf("Multi-metric monitoring started:\n");
+    printf("- CPU: Threshold (75%%)\n");
+    printf("- Memory: Trend (window=5, max slope=10)\n");
+    printf("- Network: Threshold (500 pkt/s)\n\n");
+
+    for (int i = 0; i < 15; i++) {
+        float cpu = get_cpu_usage();
+        float memory = get_memory_usage();
+        float network = get_network_packets();
+
+        uint64_t ts = (uint64_t)time(NULL) * 1000ULL + (uint64_t)i * 100ULL;
+        embedids_add_datapoint(&context, "cpu_usage", (embedids_metric_value_t){ .f32 = cpu }, ts);
+        embedids_add_datapoint(&context, "memory_usage", (embedids_metric_value_t){ .f32 = memory }, ts);
+        embedids_add_datapoint(&context, "network_packets", (embedids_metric_value_t){ .f32 = network }, ts);
+
+        embedids_result_t overall = embedids_analyze_all(&context);
+        printf("Iter %2d: CPU=%4.1f%% Mem=%4.1f%% Net=%5.0f pkt/s %s\n", i+1, cpu, memory, network,
+               (overall == EMBEDIDS_OK) ? "✅ SECURE" : "🚨 THREAT");
+        usleep(200000);
     }
-    
+
     embedids_cleanup(&context);
     return 0;
 }
 ```
-
-## Advanced Configuration
-
 ### Multiple Metrics with Different Algorithms
 
 ```c
@@ -215,95 +147,6 @@ float get_network_packets() {
     return 100.0f + (rand() % 500);  // 100-600 packets/s
 }
 
-int main() {
-    srand((unsigned int)time(NULL));
-    
-    // Allocate memory for each metric
-    static embedids_metric_datapoint_t cpu_history[50];
-    static embedids_metric_datapoint_t memory_history[50];
-    static embedids_metric_datapoint_t network_history[30];
-    
-    // ===== CPU Metric =====
-    embedids_metric_t cpu_metric;
-    memset(&cpu_metric, 0, sizeof(cpu_metric));
-    strncpy(cpu_metric.name, "cpu_usage", EMBEDIDS_MAX_METRIC_NAME_LEN - 1);
-    cpu_metric.type = EMBEDIDS_METRIC_TYPE_PERCENTAGE;
-    cpu_metric.history = cpu_history;
-    cpu_metric.max_history_size = 50;
-    cpu_metric.enabled = true;
-    
-    // CPU: Threshold algorithm
-    embedids_algorithm_t cpu_threshold;
-    memset(&cpu_threshold, 0, sizeof(cpu_threshold));
-    cpu_threshold.type = EMBEDIDS_ALGORITHM_THRESHOLD;
-    cpu_threshold.enabled = true;
-    cpu_threshold.config.threshold.max_threshold.f32 = 75.0f;
-    cpu_threshold.config.threshold.check_max = true;
-    cpu_threshold.config.threshold.check_min = false;
-    
-    embedids_metric_config_t cpu_config;
-    memset(&cpu_config, 0, sizeof(cpu_config));
-    cpu_config.metric = cpu_metric;
-    cpu_config.algorithms[0] = cpu_threshold;
-    cpu_config.num_algorithms = 1;
-    
-    // ===== Memory Metric =====
-    embedids_metric_t memory_metric;
-    memset(&memory_metric, 0, sizeof(memory_metric));
-    strncpy(memory_metric.name, "memory_usage", EMBEDIDS_MAX_METRIC_NAME_LEN - 1);
-    memory_metric.type = EMBEDIDS_METRIC_TYPE_PERCENTAGE;
-    memory_metric.history = memory_history;
-    memory_metric.max_history_size = 50;
-    memory_metric.enabled = true;
-    
-    // Memory: Trend algorithm
-    embedids_algorithm_t memory_trend;
-    memset(&memory_trend, 0, sizeof(memory_trend));
-    memory_trend.type = EMBEDIDS_ALGORITHM_TREND;
-    memory_trend.enabled = true;
-    memory_trend.config.trend.window_size = 5;
-    memory_trend.config.trend.max_slope = 10.0f;  // Max 10% increase per window
-    
-    embedids_metric_config_t memory_config;
-    memset(&memory_config, 0, sizeof(memory_config));
-    memory_config.metric = memory_metric;
-    memory_config.algorithms[0] = memory_trend;
-    memory_config.num_algorithms = 1;
-    
-    // ===== Network Metric =====
-    embedids_metric_t network_metric;
-    memset(&network_metric, 0, sizeof(network_metric));
-    strncpy(network_metric.name, "network_packets", EMBEDIDS_MAX_METRIC_NAME_LEN - 1);
-    network_metric.type = EMBEDIDS_METRIC_TYPE_FLOAT;
-    network_metric.history = network_history;
-    network_metric.max_history_size = 30;
-    network_metric.enabled = true;
-    
-    // Network: Threshold algorithm
-    embedids_algorithm_t network_threshold;
-    memset(&network_threshold, 0, sizeof(network_threshold));
-    network_threshold.type = EMBEDIDS_ALGORITHM_THRESHOLD;
-    network_threshold.enabled = true;
-    network_threshold.config.threshold.max_threshold.f32 = 500.0f;
-    network_threshold.config.threshold.check_max = true;
-    network_threshold.config.threshold.check_min = false;
-    
-    embedids_metric_config_t network_config;
-    memset(&network_config, 0, sizeof(network_config));
-    network_config.metric = network_metric;
-    network_config.algorithms[0] = network_threshold;
-    network_config.num_algorithms = 1;
-    
-    // ===== System Configuration =====
-    embedids_metric_config_t metrics[3] = {cpu_config, memory_config, network_config};
-    
-    embedids_system_config_t system_config;
-    memset(&system_config, 0, sizeof(system_config));
-    system_config.metrics = metrics;
-    system_config.max_metrics = 3;
-    system_config.num_active_metrics = 3;
-    
-    // Initialize EmbedIDS context and system
     embedids_context_t context;
     memset(&context, 0, sizeof(context));
     
@@ -366,6 +209,7 @@ Custom algorithms allow you to implement specialized detection logic:
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <unistd.h>
 #include "embedids.h"
 
 // Custom algorithm context
@@ -420,106 +264,58 @@ embedids_result_t anomaly_detector(const embedids_metric_t* metric,
     return EMBEDIDS_OK;
 }
 
-int main() {
-    // User-managed memory
+int main(void) {
     static embedids_metric_datapoint_t sensor_history[40];
-    
-    // Custom algorithm context
-    anomaly_detector_context_t detector_ctx = {
-        .baseline = 50.0f,
-        .violation_count = 0,
-        .max_violations = 3
-    };
-    
-    // Configure metric
-    embedids_metric_t sensor_metric;
-    memset(&sensor_metric, 0, sizeof(sensor_metric));
-    strncpy(sensor_metric.name, "sensor_data", EMBEDIDS_MAX_METRIC_NAME_LEN - 1);
-    sensor_metric.type = EMBEDIDS_METRIC_TYPE_FLOAT;
-    sensor_metric.history = sensor_history;
-    sensor_metric.max_history_size = 40;
-    sensor_metric.enabled = true;
-    
-    // Configure custom algorithm
-    embedids_algorithm_t custom_algo;
-    memset(&custom_algo, 0, sizeof(custom_algo));
-    custom_algo.type = EMBEDIDS_ALGORITHM_CUSTOM;
-    custom_algo.enabled = true;
-    custom_algo.config.custom.function = anomaly_detector;
-    custom_algo.config.custom.config = NULL;
-    custom_algo.config.custom.context = &detector_ctx;
-    
-    // Configure threshold algorithm as backup
-    embedids_algorithm_t threshold_algo;
-    memset(&threshold_algo, 0, sizeof(threshold_algo));
-    threshold_algo.type = EMBEDIDS_ALGORITHM_THRESHOLD;
-    threshold_algo.enabled = true;
-    threshold_algo.config.threshold.max_threshold.f32 = 100.0f;
-    threshold_algo.config.threshold.min_threshold.f32 = 0.0f;
-    threshold_algo.config.threshold.check_max = true;
-    threshold_algo.config.threshold.check_min = true;
-    
-    // Metric configuration with multiple algorithms
-    embedids_metric_config_t metric_config;
-    memset(&metric_config, 0, sizeof(metric_config));
-    metric_config.metric = sensor_metric;
-    metric_config.algorithms[0] = custom_algo;      // Custom algorithm first
-    metric_config.algorithms[1] = threshold_algo;   // Threshold as backup
+    static embedids_algorithm_t algorithms[2];
+
+    anomaly_detector_context_t detector_ctx = { .baseline = 50.0f, .violation_count = 0, .max_violations = 3 };
+
+    // Custom algorithm slot
+    memset(&algorithms[0], 0, sizeof(algorithms[0]));
+    embedids_algorithm_init(&algorithms[0], EMBEDIDS_ALGORITHM_CUSTOM, true);
+    algorithms[0].config.custom.function = anomaly_detector;
+    algorithms[0].config.custom.config = NULL;
+    algorithms[0].config.custom.context = &detector_ctx;
+
+    // Threshold backup
+    memset(&algorithms[1], 0, sizeof(algorithms[1]));
+    embedids_algorithm_init(&algorithms[1], EMBEDIDS_ALGORITHM_THRESHOLD, true);
+    algorithms[1].config.threshold.max_threshold.f32 = 100.0f;
+    algorithms[1].config.threshold.min_threshold.f32 = 0.0f;
+    algorithms[1].config.threshold.check_max = true;
+    algorithms[1].config.threshold.check_min = true;
+
+    embedids_metric_config_t metric_config; memset(&metric_config, 0, sizeof(metric_config));
+    embedids_metric_init(&metric_config, "sensor_data", EMBEDIDS_METRIC_TYPE_FLOAT,
+                         sensor_history, (uint32_t)(sizeof(sensor_history)/sizeof(sensor_history[0])),
+                         algorithms, (uint32_t)(sizeof(algorithms)/sizeof(algorithms[0])));
     metric_config.num_algorithms = 2;
-    
-    // System configuration
-    embedids_system_config_t system_config;
-    memset(&system_config, 0, sizeof(system_config));
+
+    embedids_system_config_t system_config; memset(&system_config, 0, sizeof(system_config));
     system_config.metrics = &metric_config;
-    system_config.max_metrics = 1;
     system_config.num_active_metrics = 1;
-    
-    // Initialize context and system
-    embedids_context_t context;
-    memset(&context, 0, sizeof(context));
-    
-    embedids_result_t result = embedids_init(&context, &system_config);
-    if (result != EMBEDIDS_OK) {
-        printf("Failed to initialize EmbedIDS: %d\n", result);
+
+    embedids_context_t context; memset(&context, 0, sizeof(context));
+    if (embedids_init(&context, &system_config) != EMBEDIDS_OK) {
+        printf("Init failed\n");
         return 1;
     }
-    
-    printf("Custom algorithm demo started (baseline: %.1f)\n", detector_ctx.baseline);
-    printf("Algorithms: Custom Anomaly Detector + Threshold (0-100)\n\n");
-    
-    // Simulate sensor data with anomalies
-    float sensor_values[] = {
-        48.0, 52.0, 49.0, 51.0, 47.0,  // Normal data around baseline
-        85.0, 88.0, 90.0,              // Anomaly: high values
-        45.0, 50.0, 48.0,              // Back to normal
-        15.0, 12.0, 18.0,              // Anomaly: low values
-        52.0, 49.0, 51.0               // Normal again
-    };
-    
-    int num_values = sizeof(sensor_values) / sizeof(sensor_values[0]);
-    
+
+    printf("Custom algorithm demo started (baseline %.1f)\n", detector_ctx.baseline);
+    printf("Algorithms: Custom anomaly + Threshold (0-100)\n\n");
+
+    float sensor_values[] = { 48.0,52.0,49.0,51.0,47.0, 85.0,88.0,90.0, 45.0,50.0,48.0, 15.0,12.0,18.0, 52.0,49.0,51.0 };
+    int num_values = (int)(sizeof(sensor_values)/sizeof(sensor_values[0]));
     for (int i = 0; i < num_values; i++) {
         float value = sensor_values[i];
-        
-        // Add data point
-        embedids_metric_value_t val = {.f32 = value};
-        uint64_t timestamp = (uint64_t)time(NULL) * 1000 + i * 100;
-        
-        embedids_add_datapoint(&context, "sensor_data", val, timestamp);
-        
-        // Analyze
-        result = embedids_analyze_metric(&context, "sensor_data");
-        
-        printf("Sample %2d: Value=%.1f ", i+1, value);
-        if (result == EMBEDIDS_OK) {
-            printf("✅ NORMAL\n");
-        } else {
-            printf("🚨 ANOMALY DETECTED\n");
-        }
-        
-        usleep(300000);  // 300ms delay
+        embedids_metric_value_t mv = { .f32 = value };
+        uint64_t ts = (uint64_t)time(NULL) * 1000ULL + (uint64_t)i * 100ULL;
+        embedids_add_datapoint(&context, "sensor_data", mv, ts);
+        embedids_result_t r = embedids_analyze_metric(&context, "sensor_data");
+        printf("Sample %2d: Value=%.1f %s\n", i+1, value, (r == EMBEDIDS_OK) ? "✅ NORMAL" : "🚨 ANOMALY");
+        usleep(300000);
     }
-    
+
     embedids_cleanup(&context);
     return 0;
 }
@@ -677,6 +473,49 @@ printf("Analysis took %.3f ms\n", cpu_time * 1000);
 ```
 
 ## Conclusion
+
+### Migration from Older API Versions
+
+Earlier versions required: 
+- Fixed compile-time limits (EMBEDIDS_MAX_METRICS, EMBEDIDS_MAX_METRIC_NAME_LEN, EMBEDIDS_MAX_ALGORITHMS_PER_METRIC)
+- Direct struct field population (copying names into fixed char arrays)
+- Implicit fixed-size algorithm arrays inside each metric config
+
+These have been removed in favor of a more flexible, user-supplied memory model:
+1. Provide your own history buffers (as before)
+2. Provide an algorithms array sized for the algorithms you intend to attach
+3. Use embedids_metric_init(...) to correctly initialize each metric configuration
+4. Set metric_config.num_algorithms after populating algorithm entries
+
+Benefits:
+- No rebuild needed for different sizing
+- Clear ownership of memory
+- Smaller binary if many features unused
+- Easier to extend / test
+
+New helper added:
+- embedids_algorithm_init(&algo, TYPE, enabled) simplifies preparing algorithm slots before setting detailed configuration fields (threshold values, trend parameters, or custom function/context).
+
+Minimal migration example (old → new):
+```c
+// OLD (simplified)
+embedids_metric_config_t old_cfg; memset(&old_cfg,0,sizeof(old_cfg));
+// Previously: copy into fixed buffer and rely on internal fixed algorithm array
+// strncpy(old_cfg.metric.name, "temp", EMBEDIDS_MAX_METRIC_NAME_LEN-1);
+old_cfg.metric.name = "temp"; // (if pointer field was not available before, this is conceptual)
+old_cfg.metric.history = hist; old_cfg.metric.max_history_size = HIST_SZ; old_cfg.metric.enabled = true;
+old_cfg.algorithms[0] = algo; old_cfg.num_algorithms = 1;
+
+// NEW
+static embedids_algorithm_t algos[1]; algos[0] = algo; // configure first
+embedids_metric_config_t new_cfg; memset(&new_cfg,0,sizeof(new_cfg));
+embedids_metric_init(&new_cfg, "temp", EMBEDIDS_METRIC_TYPE_FLOAT, hist, HIST_SZ, algos, 1);
+new_cfg.num_algorithms = 1; // after filling algos
+```
+
+If you previously relied on the maximum metric count macro, simply size your metrics array explicitly and set system_config.num_active_metrics accordingly.
+
+If you find any leftover references to removed macros in your code, they can be safely deleted—there is no equivalent replacement required.
 
 EmbedIDS provides a flexible, efficient intrusion detection framework for embedded systems. Key takeaways:
 

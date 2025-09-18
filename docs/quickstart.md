@@ -23,70 +23,64 @@ Create `my_monitor.c`:
 #include "embedids.h"
 
 int main() {
-    // 1. Allocate memory for metric history
+    // 1. Allocate user memory
     static embedids_metric_datapoint_t cpu_history[50];
-    
-    // 2. Configure CPU metric
-    embedids_metric_t cpu_metric;
-    memset(&cpu_metric, 0, sizeof(cpu_metric));
-    strcpy(cpu_metric.name, "cpu_usage");
-    cpu_metric.type = EMBEDIDS_METRIC_TYPE_PERCENTAGE;
-    cpu_metric.history = cpu_history;
-    cpu_metric.max_history_size = 50;
-    cpu_metric.enabled = true;
-    
-    // 3. Configure threshold algorithm (alert if CPU > 80%)
-    embedids_algorithm_t threshold_algo;
-    memset(&threshold_algo, 0, sizeof(threshold_algo));
-    threshold_algo.type = EMBEDIDS_ALGORITHM_THRESHOLD;
-    threshold_algo.enabled = true;
-    threshold_algo.config.threshold.max_threshold.f32 = 80.0f;
-    threshold_algo.config.threshold.check_max = true;
-    
-    // 4. Create metric configuration
-    embedids_metric_config_t metric_config;
-    memset(&metric_config, 0, sizeof(metric_config));
-    metric_config.metric = cpu_metric;
-    metric_config.algorithms[0] = threshold_algo;
-    metric_config.num_algorithms = 1;
-    
-    // 5. Create system configuration
-    embedids_system_config_t system_config;
-    memset(&system_config, 0, sizeof(system_config));
-    system_config.metrics = &metric_config;
-    system_config.max_metrics = 1;
-    system_config.num_active_metrics = 1;
-    
-    // 6. Initialize EmbedIDS context and system
+    static embedids_algorithm_t cpu_algorithms[1];
+
+    // 2. Prepare algorithm (threshold > 80%) using new value-returning config helpers
+    embedids_algorithm_init(&cpu_algorithms[0], EMBEDIDS_ALGORITHM_THRESHOLD, true);
+    embedids_metric_value_t maxv = { .f32 = 80.0f };
+    cpu_algorithms[0].config.threshold = embedids_threshold_config_init(NULL, &maxv);
+
+    // 3. Initialize metric configuration with helper
+    embedids_metric_config_t cpu_metric_config;
+    memset(&cpu_metric_config, 0, sizeof(cpu_metric_config));
+    embedids_result_t r = embedids_metric_init(
+        &cpu_metric_config,
+        "cpu_usage",
+        EMBEDIDS_METRIC_TYPE_PERCENTAGE,
+        cpu_history,
+        (uint32_t)(sizeof(cpu_history)/sizeof(cpu_history[0])),
+        cpu_algorithms,
+        (uint32_t)(sizeof(cpu_algorithms)/sizeof(cpu_algorithms[0]))
+    );
+    if (r != EMBEDIDS_OK) {
+        printf("Metric init failed: %d\n", r);
+        return 1;
+    }
+    cpu_metric_config.num_algorithms = 1; // we populated first slot
+
+    // 4. System configuration (now constructed via helper)
+    embedids_system_config_t system_config =
+        embedids_system_config_init(&cpu_metric_config, 1, NULL);
+
+    // 5. Initialize context
     embedids_context_t context;
     memset(&context, 0, sizeof(context));
-    
     if (embedids_init(&context, &system_config) != EMBEDIDS_OK) {
         printf("Failed to initialize EmbedIDS\n");
         return 1;
     }
-    
+
     printf("🔒 CPU Monitor Started (threshold: 80%%)\n\n");
-    
-    // 7. Monitoring loop
+
+    // 6. Monitoring loop
     for (int i = 0; i < 10; i++) {
-        // Simulate CPU usage (gradually increasing)
-        float cpu = 30.0f + (i * 8.0f);
-        
-        // Add data point
+        float cpu = 30.0f + (i * 8.0f); // Simulated CPU usage
         embedids_metric_value_t value = {.f32 = cpu};
-        embedids_add_datapoint(&context, "cpu_usage", value, time(NULL) * 1000);
-        
-        // Check for threats
-        if (embedids_analyze_metric(&context, "cpu_usage") == EMBEDIDS_OK) {
+        embedids_add_datapoint(&context, "cpu_usage", value, (uint64_t)time(NULL) * 1000ULL);
+
+        embedids_result_t ar = embedids_analyze_metric(&context, "cpu_usage");
+        if (ar == EMBEDIDS_OK) {
             printf("✅ CPU: %.1f%% - Normal\n", cpu);
+        } else if (ar == EMBEDIDS_ERROR_THRESHOLD_EXCEEDED) {
+            printf("🚨 CPU: %.1f%% - ALERT (threshold)\n", cpu);
         } else {
-            printf("🚨 CPU: %.1f%% - ALERT!\n", cpu);
+            printf("⚠️ CPU: %.1f%% - Analysis error %d\n", cpu, ar);
         }
-        
         sleep(1);
     }
-    
+
     embedids_cleanup(&context);
     return 0;
 }
@@ -95,7 +89,8 @@ int main() {
 ## Compile and Run
 
 ```bash
-gcc -o my_monitor my_monitor.c -L. -lembedids -I../include
+# Adjust -I/-L paths based on your build output location
+gcc -I../include -L. -lembedids -o my_monitor my_monitor.c
 ./my_monitor
 ```
 
@@ -119,7 +114,7 @@ gcc -o my_monitor my_monitor.c -L. -lembedids -I../include
 ## What Just Happened?
 
 1. **Created a metric**: CPU usage with 50-point history
-2. **Added detection**: Threshold algorithm at 80%
+2. **Added detection**: Threshold algorithm at 80% (using `embedids_threshold_config_init`)
 3. **Monitored in real-time**: Added data points and analyzed
 4. **Got alerts**: When CPU exceeded threshold
 
@@ -141,6 +136,9 @@ embedids_add_datapoint(&context, name, val, time) // Add sensor data
 embedids_analyze_metric(&context, name)      // Check one metric
 embedids_analyze_all(&context)               // Check all metrics
 embedids_cleanup(&context)                   // Shutdown system
+embedids_threshold_config_init(&min,&max)    // Create threshold config (NULL to skip one side)
+embedids_trend_config_init(window,slope,var,expected) // Create trend config
+embedids_system_config_init(metrics,count,user_ctx) // Create system config
 ```
 
 ### Algorithm Types

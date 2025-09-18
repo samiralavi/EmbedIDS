@@ -30,13 +30,13 @@ protected:
                        embedids_metric_type_t type,
                        uint32_t history_size) {
     memset(&metric_config, 0, sizeof(metric_config));
-    strncpy(metric_config.metric.name, name, EMBEDIDS_MAX_METRIC_NAME_LEN - 1);
-    metric_config.metric.type = type;
-    metric_config.metric.enabled = true;
-    metric_config.metric.history = history_buffer;
-    metric_config.metric.max_history_size = history_size;
-    metric_config.metric.current_size = 0;
-    metric_config.metric.write_index = 0;
+    ASSERT_EQ(embedids_metric_init(&metric_config,
+                                   name,
+                                   type,
+                                   history_buffer,
+                                   history_size,
+                                   nullptr,
+                                   0), EMBEDIDS_OK);
   }
 
   /**
@@ -45,7 +45,6 @@ protected:
   embedids_result_t initializeWithMetric(embedids_metric_config_t* metric_config) {
     memset(&system_config, 0, sizeof(system_config));
     system_config.metrics = metric_config;
-    system_config.max_metrics = 1;
     system_config.num_active_metrics = 1;
     
     return embedids_init(&context, &system_config);
@@ -125,7 +124,6 @@ TEST_F(EmbedIDSMetricsTest, DifferentMetricTypes) {
   embedids_system_config_t system_config;
   memset(&system_config, 0, sizeof(system_config));
   system_config.metrics = metric_configs;
-  system_config.max_metrics = 4;
   system_config.num_active_metrics = 4;
 
   // Initialize system

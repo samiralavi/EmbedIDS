@@ -93,127 +93,71 @@ int main(void) {
     printf("IoT Device Security Monitor v%s\n", embedids_get_version());
     printf("=====================================\n\n");
 
-    // Configure metrics for IoT device monitoring
+    // Configure metrics for IoT device monitoring using new init API
     embedids_metric_config_t device_metrics[NUM_DEVICE_METRICS];
-    
-    // Temperature Monitoring (with tampering detection)
-    device_metrics[0] = (embedids_metric_config_t) {
-        .metric = {
-            .type = EMBEDIDS_METRIC_TYPE_FLOAT,
-            .history = temperature_history,
-            .max_history_size = DEVICE_HISTORY_SIZE,
-            .current_size = 0,
-            .write_index = 0,
-            .enabled = true
-        },
-        .num_algorithms = 2
-    };
-    strncpy(device_metrics[0].metric.name, "temperature", EMBEDIDS_MAX_METRIC_NAME_LEN);
-    
-    // Threshold algorithm for temperature
-    device_metrics[0].algorithms[0] = (embedids_algorithm_t) {
+    embedids_algorithm_t temp_algorithms[2];
+    embedids_algorithm_t humidity_algorithms[2];
+    embedids_algorithm_t power_algorithms[1];
+    embedids_algorithm_t conn_algorithms[1];
+    memset(temp_algorithms, 0, sizeof(temp_algorithms));
+    memset(humidity_algorithms, 0, sizeof(humidity_algorithms));
+    memset(power_algorithms, 0, sizeof(power_algorithms));
+    memset(conn_algorithms, 0, sizeof(conn_algorithms));
+
+    embedids_metric_init(&device_metrics[0], "temperature", EMBEDIDS_METRIC_TYPE_FLOAT,
+                         temperature_history, DEVICE_HISTORY_SIZE, temp_algorithms, 2);
+    device_metrics[0].num_algorithms = 2;
+    device_metrics[0].algorithms[0] = (embedids_algorithm_t){
         .type = EMBEDIDS_ALGORITHM_THRESHOLD,
         .enabled = true,
         .config.threshold = {
-            .min_threshold = { .f32 = 0.0f },    // Alert if temp < 0C
-            .max_threshold = { .f32 = 40.0f },   // Alert if temp > 40C
+            .min_threshold = { .f32 = 0.0f },
+            .max_threshold = { .f32 = 40.0f },
             .check_max = true,
             .check_min = true
         }
     };
-    
-    // Custom tampering detection algorithm
-    device_metrics[0].algorithms[1] = (embedids_algorithm_t) {
+    device_metrics[0].algorithms[1] = (embedids_algorithm_t){
         .type = EMBEDIDS_ALGORITHM_CUSTOM,
         .enabled = true,
-        .config.custom = {
-            .function = tampering_detector,
-            .config = NULL,
-            .context = NULL
-        }
+        .config.custom = { .function = tampering_detector, .config = NULL, .context = NULL }
     };
-    
-    // Humidity Monitoring (with tampering detection)
-    device_metrics[1] = (embedids_metric_config_t) {
-        .metric = {
-            .type = EMBEDIDS_METRIC_TYPE_FLOAT,
-            .history = humidity_history,
-            .max_history_size = DEVICE_HISTORY_SIZE,
-            .current_size = 0,
-            .write_index = 0,
-            .enabled = true
-        },
-        .num_algorithms = 2
-    };
-    strncpy(device_metrics[1].metric.name, "humidity", EMBEDIDS_MAX_METRIC_NAME_LEN);
-    
-    device_metrics[1].algorithms[0] = (embedids_algorithm_t) {
+
+    embedids_metric_init(&device_metrics[1], "humidity", EMBEDIDS_METRIC_TYPE_FLOAT,
+                         humidity_history, DEVICE_HISTORY_SIZE, humidity_algorithms, 2);
+    device_metrics[1].num_algorithms = 2;
+    device_metrics[1].algorithms[0] = (embedids_algorithm_t){
         .type = EMBEDIDS_ALGORITHM_THRESHOLD,
         .enabled = true,
         .config.threshold = {
-            .min_threshold = { .f32 = 10.0f },   // Alert if humidity < 10%
-            .max_threshold = { .f32 = 90.0f },   // Alert if humidity > 90%
+            .min_threshold = { .f32 = 10.0f },
+            .max_threshold = { .f32 = 90.0f },
             .check_max = true,
             .check_min = true
         }
     };
-    
-    device_metrics[1].algorithms[1] = (embedids_algorithm_t) {
+    device_metrics[1].algorithms[1] = (embedids_algorithm_t){
         .type = EMBEDIDS_ALGORITHM_CUSTOM,
         .enabled = true,
-        .config.custom = {
-            .function = tampering_detector,
-            .config = NULL,
-            .context = NULL
-        }
+        .config.custom = { .function = tampering_detector, .config = NULL, .context = NULL }
     };
-    
-    // Power Consumption Monitoring
-    device_metrics[2] = (embedids_metric_config_t) {
-        .metric = {
-            .type = EMBEDIDS_METRIC_TYPE_FLOAT,
-            .history = power_history,
-            .max_history_size = DEVICE_HISTORY_SIZE,
-            .current_size = 0,
-            .write_index = 0,
-            .enabled = true
-        },
-        .num_algorithms = 1
-    };
-    strncpy(device_metrics[2].metric.name, "power", EMBEDIDS_MAX_METRIC_NAME_LEN);
-    
-    device_metrics[2].algorithms[0] = (embedids_algorithm_t) {
+
+    embedids_metric_init(&device_metrics[2], "power", EMBEDIDS_METRIC_TYPE_FLOAT,
+                         power_history, DEVICE_HISTORY_SIZE, power_algorithms, 1);
+    device_metrics[2].num_algorithms = 1;
+    device_metrics[2].algorithms[0] = (embedids_algorithm_t){
         .type = EMBEDIDS_ALGORITHM_THRESHOLD,
         .enabled = true,
-        .config.threshold = {
-            .max_threshold = { .f32 = 15.0f },   // Alert if power > 15W (possible crypto mining)
-            .check_max = true,
-            .check_min = false
-        }
+        .config.threshold = { .max_threshold = { .f32 = 15.0f }, .check_max = true, .check_min = false }
     };
-    
-    // Network Connection Monitoring
-    device_metrics[3] = (embedids_metric_config_t) {
-        .metric = {
-            .type = EMBEDIDS_METRIC_TYPE_UINT32,
-            .history = connection_history,
-            .max_history_size = DEVICE_HISTORY_SIZE,
-            .current_size = 0,
-            .write_index = 0,
-            .enabled = true
-        },
-        .num_algorithms = 1
-    };
-    strncpy(device_metrics[3].metric.name, "connections", EMBEDIDS_MAX_METRIC_NAME_LEN);
-    
-    device_metrics[3].algorithms[0] = (embedids_algorithm_t) {
+
+    embedids_metric_init(&device_metrics[3], "connections", EMBEDIDS_METRIC_TYPE_UINT32,
+                         connection_history, DEVICE_HISTORY_SIZE, conn_algorithms, 1);
+    device_metrics[3].num_algorithms = 1;
+    device_metrics[3].algorithms[0] = (embedids_algorithm_t){
         .type = EMBEDIDS_ALGORITHM_THRESHOLD,
         .enabled = true,
-        .config.threshold = {
-            .max_threshold = { .u32 = 5 },       // Alert if > 5 connections (DDoS/scanning)
-            .check_max = true,
-            .check_min = false
-        }
+        .config.threshold = { .max_threshold = { .u32 = 5 }, .check_max = true, .check_min = false }
     };
 
     // Initialize EmbedIDS
@@ -222,7 +166,6 @@ int main(void) {
     
     embedids_system_config_t system_config = {
         .metrics = device_metrics,
-        .max_metrics = NUM_DEVICE_METRICS,
         .num_active_metrics = NUM_DEVICE_METRICS,
         .user_context = NULL
     };

@@ -22,71 +22,44 @@ int main(void) {
 
     // Define metrics with thresholds using new extensible API
     embedids_metric_config_t metrics[3];
-    
-    // CPU Usage Metric
-    metrics[0] = (embedids_metric_config_t){
-        .metric = {
-            .type = EMBEDIDS_METRIC_TYPE_PERCENTAGE,
-            .history = cpu_history,
-            .max_history_size = MAX_HISTORY_SIZE,
-            .current_size = 0,
-            .write_index = 0,
-            .enabled = true
-        },
-        .num_algorithms = 1
-    };
-    strncpy(metrics[0].metric.name, "cpu_usage", EMBEDIDS_MAX_METRIC_NAME_LEN);
+    embedids_algorithm_t cpu_algorithms[1];
+    embedids_algorithm_t mem_algorithms[1];
+    embedids_algorithm_t net_algorithms[1];
+
+    embedids_metric_init(&metrics[0], "cpu_usage", EMBEDIDS_METRIC_TYPE_PERCENTAGE,
+                         cpu_history, MAX_HISTORY_SIZE, cpu_algorithms, 1);
+    metrics[0].num_algorithms = 1;
     metrics[0].algorithms[0] = (embedids_algorithm_t){
         .type = EMBEDIDS_ALGORITHM_THRESHOLD,
         .enabled = true,
         .config.threshold = {
-            .max_threshold = { .f32 = 75.0f },  // Alert if CPU > 75%
+            .max_threshold = { .f32 = 75.0f },
             .check_max = true,
             .check_min = false
         }
     };
-    
-    // Memory Usage Metric  
-    metrics[1] = (embedids_metric_config_t){
-        .metric = {
-            .type = EMBEDIDS_METRIC_TYPE_UINT32,
-            .history = memory_history,
-            .max_history_size = MAX_HISTORY_SIZE,
-            .current_size = 0,
-            .write_index = 0,
-            .enabled = true
-        },
-        .num_algorithms = 1
-    };
-    strncpy(metrics[1].metric.name, "memory_usage", EMBEDIDS_MAX_METRIC_NAME_LEN);
+
+    embedids_metric_init(&metrics[1], "memory_usage", EMBEDIDS_METRIC_TYPE_UINT32,
+                         memory_history, MAX_HISTORY_SIZE, mem_algorithms, 1);
+    metrics[1].num_algorithms = 1;
     metrics[1].algorithms[0] = (embedids_algorithm_t){
         .type = EMBEDIDS_ALGORITHM_THRESHOLD,
         .enabled = true,
         .config.threshold = {
-            .max_threshold = { .u32 = 512000 },  // Alert if memory > 500MB
+            .max_threshold = { .u32 = 512000 },
             .check_max = true,
             .check_min = false
         }
     };
-    
-    // Network Packets Metric
-    metrics[2] = (embedids_metric_config_t){
-        .metric = {
-            .type = EMBEDIDS_METRIC_TYPE_RATE,
-            .history = network_history,
-            .max_history_size = MAX_HISTORY_SIZE,
-            .current_size = 0,
-            .write_index = 0,
-            .enabled = true
-        },
-        .num_algorithms = 1
-    };
-    strncpy(metrics[2].metric.name, "network_packets", EMBEDIDS_MAX_METRIC_NAME_LEN);
+
+    embedids_metric_init(&metrics[2], "network_packets", EMBEDIDS_METRIC_TYPE_RATE,
+                         network_history, MAX_HISTORY_SIZE, net_algorithms, 1);
+    metrics[2].num_algorithms = 1;
     metrics[2].algorithms[0] = (embedids_algorithm_t){
         .type = EMBEDIDS_ALGORITHM_THRESHOLD,
         .enabled = true,
         .config.threshold = {
-            .max_threshold = { .u32 = 800 },  // Alert if > 800 packets/sec
+            .max_threshold = { .u32 = 800 },
             .check_max = true,
             .check_min = false
         }
@@ -98,7 +71,6 @@ int main(void) {
     
     embedids_system_config_t system_config = {
         .metrics = metrics,
-        .max_metrics = 3,
         .num_active_metrics = 3,
         .user_context = NULL
     };

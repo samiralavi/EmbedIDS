@@ -25,6 +25,13 @@ extern "C" {
 #include <stdint.h>
 
 /**
+ * @brief EmbedIDS - Embedded Intrusion Detection System
+ *
+ * A modern, extensible intrusion detection library for embedded systems
+ * featuring user-managed memory, custom metrics, and pluggable algorithms.
+ */
+
+/**
  * @brief EmbedIDS library version information
  */
 #define EMBEDIDS_VERSION_MAJOR @PROJECT_VERSION_MAJOR @
@@ -35,17 +42,6 @@ extern "C" {
 /**
  * @brief Compile-time configuration options
  */
-#ifndef EMBEDIDS_MAX_METRICS
-#define EMBEDIDS_MAX_METRICS 32
-#endif
-
-#ifndef EMBEDIDS_MAX_METRIC_NAME_LEN
-#define EMBEDIDS_MAX_METRIC_NAME_LEN 32
-#endif
-
-#ifndef EMBEDIDS_MAX_ALGORITHMS_PER_METRIC
-#define EMBEDIDS_MAX_ALGORITHMS_PER_METRIC 4
-#endif
 
 #ifndef EMBEDIDS_ENABLE_FLOATING_POINT
 #define EMBEDIDS_ENABLE_FLOATING_POINT 1
@@ -54,36 +50,6 @@ extern "C" {
 #ifndef EMBEDIDS_ENABLE_DOUBLE_PRECISION
 #define EMBEDIDS_ENABLE_DOUBLE_PRECISION 0 // Disabled by default for embedded
 #endif
-
-/**
- * @brief Compile-time assertions for configuration validation
- */
-#ifdef __cplusplus
-static_assert(EMBEDIDS_MAX_METRICS > 0 && EMBEDIDS_MAX_METRICS <= 256,
-              "EMBEDIDS_MAX_METRICS must be between 1 and 256");
-static_assert(EMBEDIDS_MAX_METRIC_NAME_LEN >= 8 &&
-                  EMBEDIDS_MAX_METRIC_NAME_LEN <= 128,
-              "EMBEDIDS_MAX_METRIC_NAME_LEN must be between 8 and 128");
-static_assert(EMBEDIDS_MAX_ALGORITHMS_PER_METRIC > 0 &&
-                  EMBEDIDS_MAX_ALGORITHMS_PER_METRIC <= 8,
-              "EMBEDIDS_MAX_ALGORITHMS_PER_METRIC must be between 1 and 8");
-#else
-_Static_assert(EMBEDIDS_MAX_METRICS > 0 && EMBEDIDS_MAX_METRICS <= 256,
-               "EMBEDIDS_MAX_METRICS must be between 1 and 256");
-_Static_assert(EMBEDIDS_MAX_METRIC_NAME_LEN >= 8 &&
-                   EMBEDIDS_MAX_METRIC_NAME_LEN <= 128,
-               "EMBEDIDS_MAX_METRIC_NAME_LEN must be between 8 and 128");
-_Static_assert(EMBEDIDS_MAX_ALGORITHMS_PER_METRIC > 0 &&
-                   EMBEDIDS_MAX_ALGORITHMS_PER_METRIC <= 8,
-               "EMBEDIDS_MAX_ALGORITHMS_PER_METRIC must be between 1 and 8");
-#endif
-
-/**
- * @brief EmbedIDS - Embedded Intrusion Detection System
- *
- * A modern, extensible intrusion detection library for embedded systems
- * featuring user-managed memory, custom metrics, and pluggable algorithms.
- */
 
 /**
  * @brief Return codes for EmbedIDS functions
@@ -194,13 +160,13 @@ typedef struct __attribute__((packed)) {
  * @brief User-provided metric configuration
  */
 typedef struct {
-  char name[EMBEDIDS_MAX_METRIC_NAME_LEN]; /**< Human-readable metric name */
-  embedids_metric_type_t type;             /**< Data type of the metric */
-  embedids_metric_datapoint_t *history;    /**< User-provided history buffer */
-  uint32_t max_history_size; /**< Maximum points in history buffer */
-  uint32_t current_size;     /**< Current number of points in buffer */
-  uint32_t write_index;      /**< Next write position (circular buffer) */
-  bool enabled;              /**< Whether this metric is active */
+  const char *name;                  /**< Human-readable metric name (external lifetime) */
+  embedids_metric_type_t type;       /**< Data type of the metric */
+  embedids_metric_datapoint_t *history; /**< User-provided history buffer */
+  uint32_t max_history_size;         /**< Maximum points in history buffer */
+  uint32_t current_size;             /**< Current number of points in buffer */
+  uint32_t write_index;              /**< Next write position (circular buffer) */
+  bool enabled;                      /**< Whether this metric is active */
 } embedids_metric_t;
 
 /**
@@ -214,6 +180,16 @@ typedef struct {
 } embedids_threshold_config_t;
 
 /**
+ * @brief Construct a threshold configuration.
+ * If min_ptr is NULL, min check disabled. If max_ptr is NULL, max check disabled.
+ * @param min_ptr Optional pointer to minimum threshold value
+ * @param max_ptr Optional pointer to maximum threshold value
+ * @return threshold configuration value
+ */
+embedids_threshold_config_t embedids_threshold_config_init(const embedids_metric_value_t *min_ptr,
+                                                           const embedids_metric_value_t *max_ptr);
+
+/**
  * @brief Algorithm configuration for trend analysis
  */
 typedef struct {
@@ -222,6 +198,19 @@ typedef struct {
   float max_variance;   /**< Maximum acceptable variance */
   embedids_trend_t expected_trend; /**< Expected trend direction */
 } embedids_trend_config_t;
+
+/**
+ * @brief Construct a trend configuration.
+ * @param window_size Points in window (>=2 recommended)
+ * @param max_slope Maximum allowed slope
+ * @param max_variance Maximum allowed variance
+ * @param expected Expected trend direction
+ * @return trend configuration value
+ */
+embedids_trend_config_t embedids_trend_config_init(uint32_t window_size,
+                                                   float max_slope,
+                                                   float max_variance,
+                                                   embedids_trend_t expected);
 
 /**
  * @brief Custom algorithm function signature
@@ -255,25 +244,19 @@ typedef struct {
  * @brief Complete metric configuration with algorithms
  */
 typedef struct {
-  embedids_metric_t metric; /**< Base metric configuration */
-  embedids_algorithm_t
-      algorithms[EMBEDIDS_MAX_ALGORITHMS_PER_METRIC]; /**< Detection algorithms
-                                                       */
-  uint32_t num_algorithms; /**< Number of active algorithms */
+  embedids_metric_t metric;           /**< Base metric configuration */
+  embedids_algorithm_t *algorithms;   /**< Dynamic array of detection algorithms */
+  uint32_t num_algorithms;            /**< Number of active algorithms currently used */
+  uint32_t max_algorithms;            /**< Capacity of algorithms array */
 } embedids_metric_config_t;
 
-/**
- * @brief System configuration for EmbedIDS
- */
 /**
  * @brief Main system configuration for EmbedIDS
  */
 typedef struct {
-  embedids_metric_config_t
-      *metrics;         /**< User-provided array of metric configurations */
-  uint32_t max_metrics; /**< Maximum number of metrics in the array */
-  uint32_t num_active_metrics; /**< Number of currently active metrics */
-  void *user_context;          /**< User-provided context for callbacks */
+  embedids_metric_config_t *metrics;  /**< User-provided array of metric configurations */
+  uint32_t num_active_metrics;        /**< Number of currently active metrics */
+  void *user_context;                 /**< User-provided context for callbacks */
 } embedids_system_config_t;
 
 /**
@@ -285,12 +268,57 @@ typedef struct {
 } embedids_context_t;
 
 /**
+ * @brief Initialize an algorithm configuration structure.
+ * Convenience helper to zero the structure and set fundamental fields.
+ * For threshold: pass threshold min/max/check flags after call.
+ * For trend: set window/slope fields after call.
+ * For custom: provide function, config, and context pointers after call.
+ * @param algorithm Pointer to algorithm to initialize
+ * @param type Algorithm type
+ * @param enabled Whether the algorithm starts enabled
+ * @return EMBEDIDS_OK on success, EMBEDIDS_ERROR_INVALID_PARAM on bad pointer
+ */
+embedids_result_t embedids_algorithm_init(embedids_algorithm_t *algorithm,
+                                          embedids_algorithm_type_t type,
+                                          bool enabled);
+
+/**
+ * @brief Construct a system configuration value.
+ * @param metrics_array Pointer to metric configuration array (may be NULL if num_metrics=0)
+ * @param num_metrics Number of active metrics
+ * @param user_ctx Optional user context pointer
+ * @return system configuration value
+ */
+embedids_system_config_t embedids_system_config_init(embedids_metric_config_t *metrics_array,
+                                                     uint32_t num_metrics,
+                                                     void *user_ctx);
+/**
  * @brief Initialize the EmbedIDS library with extensible configuration
  * @param context Pointer to EmbedIDS context structure
  * @param config Pointer to system configuration
  * @return EMBEDIDS_OK on success, error code on failure
  */
 embedids_result_t embedids_init(embedids_context_t *context, const embedids_system_config_t *config);
+
+/**
+ * @brief Initialize a metric configuration structure.
+ * @param metric_config Pointer to metric configuration wrapper
+ * @param name Null-terminated metric name string (lifetime must exceed metric usage)
+ * @param type Metric data type
+ * @param history_buffer Pointer to caller-allocated history buffer array
+ * @param history_capacity Number of datapoints the history buffer can hold
+ * @param algorithms_array Pointer to caller-allocated algorithms array (optional can be NULL if none)
+ * @param algorithms_capacity Capacity (number of elements) of algorithms array
+ * @return EMBEDIDS_OK on success, error code on failure
+ */
+embedids_result_t embedids_metric_init(
+  embedids_metric_config_t *metric_config,
+  const char *name,
+  embedids_metric_type_t type,
+  embedids_metric_datapoint_t *history_buffer,
+  uint32_t history_capacity,
+  embedids_algorithm_t *algorithms_array,
+  uint32_t algorithms_capacity);
 
 /**
  * @brief Cleanup and deinitialize the EmbedIDS library

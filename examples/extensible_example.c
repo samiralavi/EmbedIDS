@@ -153,17 +153,16 @@ int main(void) {
     float network_rate_limit = 1000.0f; // Max 1000 packets/s change rate
     
     // ===== CPU Metric Configuration =====
-    embedids_metric_t cpu_metric;
-    memset(&cpu_metric, 0, sizeof(cpu_metric));
-    strncpy(cpu_metric.name, "cpu_usage", EMBEDIDS_MAX_METRIC_NAME_LEN - 1);
-    cpu_metric.type = EMBEDIDS_METRIC_TYPE_PERCENTAGE;
-    cpu_metric.history = cpu_history;
-    cpu_metric.max_history_size = 50;
-    cpu_metric.enabled = true;
-    
-    // CPU algorithms: threshold + pattern detection + rate limiting
+    embedids_metric_config_t metric_configs[3];
     embedids_algorithm_t cpu_algorithms[3];
+    embedids_algorithm_t memory_algorithms[2];
+    embedids_algorithm_t network_algorithms[2];
+    memset(&metric_configs, 0, sizeof(metric_configs));
     memset(cpu_algorithms, 0, sizeof(cpu_algorithms));
+    memset(memory_algorithms, 0, sizeof(memory_algorithms));
+    memset(network_algorithms, 0, sizeof(network_algorithms));
+    embedids_metric_init(&metric_configs[0], "cpu_usage", EMBEDIDS_METRIC_TYPE_PERCENTAGE,
+                         cpu_history, 50, cpu_algorithms, 3);
     
     // Threshold algorithm
     cpu_algorithms[0].type = EMBEDIDS_ALGORITHM_THRESHOLD;
@@ -185,19 +184,11 @@ int main(void) {
     cpu_algorithms[2].config.custom.function = rate_change_detector;
     cpu_algorithms[2].config.custom.config = &cpu_rate_limit;
     cpu_algorithms[2].config.custom.context = NULL;
+    metric_configs[0].num_algorithms = 3;
     
     // ===== Memory Metric Configuration =====
-    embedids_metric_t memory_metric;
-    memset(&memory_metric, 0, sizeof(memory_metric));
-    strncpy(memory_metric.name, "memory_pressure", EMBEDIDS_MAX_METRIC_NAME_LEN - 1);
-    memory_metric.type = EMBEDIDS_METRIC_TYPE_PERCENTAGE;
-    memory_metric.history = memory_history;
-    memory_metric.max_history_size = 50;
-    memory_metric.enabled = true;
-    
-    // Memory algorithms: trend + pattern detection
-    embedids_algorithm_t memory_algorithms[2];
-    memset(memory_algorithms, 0, sizeof(memory_algorithms));
+    embedids_metric_init(&metric_configs[1], "memory_pressure", EMBEDIDS_METRIC_TYPE_PERCENTAGE,
+                         memory_history, 50, memory_algorithms, 2);
     
     // Trend algorithm
     memory_algorithms[0].type = EMBEDIDS_ALGORITHM_TREND;
@@ -211,19 +202,11 @@ int main(void) {
     memory_algorithms[1].config.custom.function = advanced_pattern_detector;
     memory_algorithms[1].config.custom.config = NULL;
     memory_algorithms[1].config.custom.context = &memory_pattern_ctx;
+    metric_configs[1].num_algorithms = 2;
     
     // ===== Network Metric Configuration =====
-    embedids_metric_t network_metric;
-    memset(&network_metric, 0, sizeof(network_metric));
-    strncpy(network_metric.name, "network_packets", EMBEDIDS_MAX_METRIC_NAME_LEN - 1);
-    network_metric.type = EMBEDIDS_METRIC_TYPE_FLOAT;
-    network_metric.history = network_history;
-    network_metric.max_history_size = 30;
-    network_metric.enabled = true;
-    
-    // Network algorithms: threshold + rate detection
-    embedids_algorithm_t network_algorithms[2];
-    memset(network_algorithms, 0, sizeof(network_algorithms));
+    embedids_metric_init(&metric_configs[2], "network_packets", EMBEDIDS_METRIC_TYPE_FLOAT,
+                         network_history, 30, network_algorithms, 2);
     
     // Threshold algorithm
     network_algorithms[0].type = EMBEDIDS_ALGORITHM_THRESHOLD;
@@ -238,23 +221,6 @@ int main(void) {
     network_algorithms[1].config.custom.function = rate_change_detector;
     network_algorithms[1].config.custom.config = &network_rate_limit;
     network_algorithms[1].config.custom.context = NULL;
-    
-    // ===== System Configuration =====
-    embedids_metric_config_t metric_configs[3];
-    
-    // CPU metric config
-    metric_configs[0].metric = cpu_metric;
-    memcpy(metric_configs[0].algorithms, cpu_algorithms, sizeof(cpu_algorithms));
-    metric_configs[0].num_algorithms = 3;
-    
-    // Memory metric config
-    metric_configs[1].metric = memory_metric;
-    memcpy(metric_configs[1].algorithms, memory_algorithms, sizeof(memory_algorithms));
-    metric_configs[1].num_algorithms = 2;
-    
-    // Network metric config
-    metric_configs[2].metric = network_metric;
-    memcpy(metric_configs[2].algorithms, network_algorithms, sizeof(network_algorithms));
     metric_configs[2].num_algorithms = 2;
     
     embedids_context_t context;
@@ -263,7 +229,6 @@ int main(void) {
     embedids_system_config_t system_config;
     memset(&system_config, 0, sizeof(system_config));
     system_config.metrics = metric_configs;
-    system_config.max_metrics = 3;
     system_config.num_active_metrics = 3;
     
     // Initialize EmbedIDS

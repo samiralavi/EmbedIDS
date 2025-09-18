@@ -30,18 +30,12 @@ protected:
                            embedids_metric_type_t type,
                            uint32_t history_size) {
     memset(&metric_config, 0, sizeof(metric_config));
-    strncpy(metric_config.metric.name, name, EMBEDIDS_MAX_METRIC_NAME_LEN - 1);
-    metric_config.metric.type = type;
-    metric_config.metric.enabled = true;
-    metric_config.metric.history = history_buffer;
-    metric_config.metric.max_history_size = history_size;
-    metric_config.metric.current_size = 0;
-    metric_config.metric.write_index = 0;
+    // Provide storage for exactly one algorithm for this helper
+    static embedids_algorithm_t single_algo_storage[1];
+    embedids_metric_init(&metric_config, name, type, history_buffer, history_size,
+                         single_algo_storage, 1);
     metric_config.num_algorithms = 1;
-    
-    // Configure threshold algorithm
-    metric_config.algorithms[0].type = EMBEDIDS_ALGORITHM_THRESHOLD;
-    metric_config.algorithms[0].enabled = true;
+    embedids_algorithm_init(&metric_config.algorithms[0], EMBEDIDS_ALGORITHM_THRESHOLD, true);
   }
 
   /**
@@ -50,7 +44,6 @@ protected:
   embedids_result_t initializeWithMetric(embedids_metric_config_t* metric_config) {
     memset(&system_config, 0, sizeof(system_config));
     system_config.metrics = metric_config;
-    system_config.max_metrics = 1;
     system_config.num_active_metrics = 1;
     
     return embedids_init(&context, &system_config);
@@ -72,10 +65,10 @@ TEST_F(EmbedIDSAlgorithmsTest, ThresholdAlgorithmFloat) {
                        EMBEDIDS_METRIC_TYPE_FLOAT, 10);
   
   // Configure float threshold algorithm
-  metric_config.algorithms[0].config.threshold.min_threshold.f32 = 10.0f;
-  metric_config.algorithms[0].config.threshold.max_threshold.f32 = 80.0f;
-  metric_config.algorithms[0].config.threshold.check_min = true;
-  metric_config.algorithms[0].config.threshold.check_max = true;
+  embedids_metric_value_t minv = { .f32 = 10.0f };
+  embedids_metric_value_t maxv = { .f32 = 80.0f };
+  metric_config.algorithms[0].config.threshold =
+      embedids_threshold_config_init(&minv, &maxv);
 
   ASSERT_EQ(initializeWithMetric(&metric_config), EMBEDIDS_OK);
 
@@ -104,10 +97,10 @@ TEST_F(EmbedIDSAlgorithmsTest, ThresholdAlgorithmFloatBoundaryValues) {
                        EMBEDIDS_METRIC_TYPE_FLOAT, 10);
   
   // Configure threshold with precise boundaries
-  metric_config.algorithms[0].config.threshold.min_threshold.f32 = 0.0f;
-  metric_config.algorithms[0].config.threshold.max_threshold.f32 = 100.0f;
-  metric_config.algorithms[0].config.threshold.check_min = true;
-  metric_config.algorithms[0].config.threshold.check_max = true;
+  embedids_metric_value_t minv2 = { .f32 = 0.0f };
+  embedids_metric_value_t maxv2 = { .f32 = 100.0f };
+  metric_config.algorithms[0].config.threshold =
+      embedids_threshold_config_init(&minv2, &maxv2);
 
   ASSERT_EQ(initializeWithMetric(&metric_config), EMBEDIDS_OK);
 
@@ -144,10 +137,10 @@ TEST_F(EmbedIDSAlgorithmsTest, ThresholdAlgorithmUint32) {
                        EMBEDIDS_METRIC_TYPE_UINT32, 10);
   
   // Configure uint32 threshold algorithm
-  metric_config.algorithms[0].config.threshold.min_threshold.u32 = 100;
-  metric_config.algorithms[0].config.threshold.max_threshold.u32 = 10000;
-  metric_config.algorithms[0].config.threshold.check_min = true;
-  metric_config.algorithms[0].config.threshold.check_max = true;
+  embedids_metric_value_t minv3 = { .u32 = 100 };
+  embedids_metric_value_t maxv3 = { .u32 = 10000 };
+  metric_config.algorithms[0].config.threshold =
+      embedids_threshold_config_init(&minv3, &maxv3);
 
   ASSERT_EQ(initializeWithMetric(&metric_config), EMBEDIDS_OK);
 
@@ -177,10 +170,10 @@ TEST_F(EmbedIDSAlgorithmsTest, ThresholdAlgorithmUint64) {
                        EMBEDIDS_METRIC_TYPE_UINT64, 10);
   
   // Configure uint64 threshold algorithm
-  metric_config.algorithms[0].config.threshold.min_threshold.u64 = 1000000ULL;
-  metric_config.algorithms[0].config.threshold.max_threshold.u64 = 1000000000ULL;
-  metric_config.algorithms[0].config.threshold.check_min = true;
-  metric_config.algorithms[0].config.threshold.check_max = true;
+  embedids_metric_value_t minv4 = { .u64 = 1000000ULL };
+  embedids_metric_value_t maxv4 = { .u64 = 1000000000ULL };
+  metric_config.algorithms[0].config.threshold =
+      embedids_threshold_config_init(&minv4, &maxv4);
 
   ASSERT_EQ(initializeWithMetric(&metric_config), EMBEDIDS_OK);
 
@@ -214,10 +207,10 @@ TEST_F(EmbedIDSAlgorithmsTest, ThresholdAlgorithmEnum) {
                        EMBEDIDS_METRIC_TYPE_ENUM, 10);
   
   // Configure enum threshold (0=OK, 1=WARN, 2=ERROR, 3=CRITICAL)
-  metric_config.algorithms[0].config.threshold.min_threshold.enum_val = 0;
-  metric_config.algorithms[0].config.threshold.max_threshold.enum_val = 2;
-  metric_config.algorithms[0].config.threshold.check_min = true;
-  metric_config.algorithms[0].config.threshold.check_max = true;
+  embedids_metric_value_t minv5 = { .enum_val = 0 };
+  embedids_metric_value_t maxv5 = { .enum_val = 2 };
+  metric_config.algorithms[0].config.threshold =
+      embedids_threshold_config_init(&minv5, &maxv5);
 
   ASSERT_EQ(initializeWithMetric(&metric_config), EMBEDIDS_OK);
 
@@ -246,8 +239,9 @@ TEST_F(EmbedIDSAlgorithmsTest, BooleanMetricWithThreshold) {
                        EMBEDIDS_METRIC_TYPE_BOOL, 10);
   
   // Configure threshold algorithm (though not really applicable for boolean)
-  metric_config.algorithms[0].config.threshold.check_min = false;
-  metric_config.algorithms[0].config.threshold.check_max = false;
+  // No min/max checks for boolean metric (pass NULLs to disable)
+  metric_config.algorithms[0].config.threshold =
+      embedids_threshold_config_init(NULL, NULL);
 
   ASSERT_EQ(initializeWithMetric(&metric_config), EMBEDIDS_OK);
 
@@ -271,23 +265,13 @@ TEST_F(EmbedIDSAlgorithmsTest, TrendAlgorithmTesting) {
   embedids_metric_datapoint_t history_buffer[10];
   embedids_metric_config_t metric_config;
   
-  memset(&metric_config, 0, sizeof(metric_config));
-  strncpy(metric_config.metric.name, "cpu_trend", EMBEDIDS_MAX_METRIC_NAME_LEN - 1);
-  metric_config.metric.type = EMBEDIDS_METRIC_TYPE_FLOAT;
-  metric_config.metric.enabled = true;
-  metric_config.metric.history = history_buffer;
-  metric_config.metric.max_history_size = 10;
-  metric_config.metric.current_size = 0;
-  metric_config.metric.write_index = 0;
-
-  // Configure trend algorithm
-  metric_config.algorithms[0].type = EMBEDIDS_ALGORITHM_TREND;
-  metric_config.algorithms[0].enabled = true;
-  metric_config.algorithms[0].config.trend.window_size = 5;
-  metric_config.algorithms[0].config.trend.max_slope = 10.0f;
-  metric_config.algorithms[0].config.trend.max_variance = 100.0f;
-  metric_config.algorithms[0].config.trend.expected_trend = EMBEDIDS_TREND_STABLE;
+  embedids_algorithm_t algo_storage1[1];
+  embedids_metric_init(&metric_config, "cpu_trend", EMBEDIDS_METRIC_TYPE_FLOAT,
+                       history_buffer, 10, algo_storage1, 1);
   metric_config.num_algorithms = 1;
+  embedids_algorithm_init(&metric_config.algorithms[0], EMBEDIDS_ALGORITHM_TREND, true);
+  metric_config.algorithms[0].config.trend =
+      embedids_trend_config_init(5, 10.0f, 100.0f, EMBEDIDS_TREND_STABLE);
 
   ASSERT_EQ(initializeWithMetric(&metric_config), EMBEDIDS_OK);
 
@@ -311,23 +295,13 @@ TEST_F(EmbedIDSAlgorithmsTest, TrendAlgorithmIncreasingPattern) {
   embedids_metric_datapoint_t history_buffer[10];
   embedids_metric_config_t metric_config;
   
-  memset(&metric_config, 0, sizeof(metric_config));
-  strncpy(metric_config.metric.name, "memory_usage", EMBEDIDS_MAX_METRIC_NAME_LEN - 1);
-  metric_config.metric.type = EMBEDIDS_METRIC_TYPE_FLOAT;
-  metric_config.metric.enabled = true;
-  metric_config.metric.history = history_buffer;
-  metric_config.metric.max_history_size = 10;
-  metric_config.metric.current_size = 0;
-  metric_config.metric.write_index = 0;
-
-  // Configure trend algorithm expecting stable trend
-  metric_config.algorithms[0].type = EMBEDIDS_ALGORITHM_TREND;
-  metric_config.algorithms[0].enabled = true;
-  metric_config.algorithms[0].config.trend.window_size = 3;
-  metric_config.algorithms[0].config.trend.max_slope = 5.0f;
-  metric_config.algorithms[0].config.trend.max_variance = 10.0f;
-  metric_config.algorithms[0].config.trend.expected_trend = EMBEDIDS_TREND_STABLE;
+  embedids_algorithm_t algo_storage2[1];
+  embedids_metric_init(&metric_config, "memory_usage", EMBEDIDS_METRIC_TYPE_FLOAT,
+                       history_buffer, 10, algo_storage2, 1);
   metric_config.num_algorithms = 1;
+  embedids_algorithm_init(&metric_config.algorithms[0], EMBEDIDS_ALGORITHM_TREND, true);
+  metric_config.algorithms[0].config.trend =
+      embedids_trend_config_init(3, 5.0f, 10.0f, EMBEDIDS_TREND_STABLE);
 
   ASSERT_EQ(initializeWithMetric(&metric_config), EMBEDIDS_OK);
 
@@ -355,10 +329,10 @@ TEST_F(EmbedIDSAlgorithmsTest, EmptyMetricAnalysis) {
   setupThresholdMetric(metric_config, history_buffer, "empty_metric", 
                        EMBEDIDS_METRIC_TYPE_FLOAT, 10);
   
-  metric_config.algorithms[0].config.threshold.min_threshold.f32 = 10.0f;
-  metric_config.algorithms[0].config.threshold.max_threshold.f32 = 80.0f;
-  metric_config.algorithms[0].config.threshold.check_min = true;
-  metric_config.algorithms[0].config.threshold.check_max = true;
+  embedids_metric_value_t minv6 = { .f32 = 10.0f };
+  embedids_metric_value_t maxv6 = { .f32 = 80.0f };
+  metric_config.algorithms[0].config.threshold =
+      embedids_threshold_config_init(&minv6, &maxv6);
 
   ASSERT_EQ(initializeWithMetric(&metric_config), EMBEDIDS_OK);
 
@@ -380,10 +354,10 @@ TEST_F(EmbedIDSAlgorithmsTest, DisabledAlgorithm) {
   
   // Configure but disable the algorithm
   metric_config.algorithms[0].enabled = false;
-  metric_config.algorithms[0].config.threshold.min_threshold.f32 = 10.0f;
-  metric_config.algorithms[0].config.threshold.max_threshold.f32 = 80.0f;
-  metric_config.algorithms[0].config.threshold.check_min = true;
-  metric_config.algorithms[0].config.threshold.check_max = true;
+  embedids_metric_value_t minv7 = { .f32 = 10.0f };
+  embedids_metric_value_t maxv7 = { .f32 = 80.0f };
+  metric_config.algorithms[0].config.threshold =
+      embedids_threshold_config_init(&minv7, &maxv7);
 
   ASSERT_EQ(initializeWithMetric(&metric_config), EMBEDIDS_OK);
 

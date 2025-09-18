@@ -128,18 +128,17 @@ TEST_F(EmbedIDSCoreTest, NullParameterHandling) {
   embedids_metric_config_t metric_config;
   memset(&metric_config, 0, sizeof(metric_config));
 
-  strncpy(metric_config.metric.name, "test_metric", EMBEDIDS_MAX_METRIC_NAME_LEN - 1);
-  metric_config.metric.type = EMBEDIDS_METRIC_TYPE_FLOAT;
-  metric_config.metric.enabled = true;
-  metric_config.metric.history = history_buffer;
-  metric_config.metric.max_history_size = 10;
-  metric_config.metric.current_size = 0;
-  metric_config.metric.write_index = 0;
+  ASSERT_EQ(embedids_metric_init(&metric_config,
+                                 "test_metric",
+                                 EMBEDIDS_METRIC_TYPE_FLOAT,
+                                 history_buffer,
+                                 10,
+                                 nullptr,
+                                 0), EMBEDIDS_OK);
 
   embedids_system_config_t system_config;
   memset(&system_config, 0, sizeof(system_config));
   system_config.metrics = &metric_config;
-  system_config.max_metrics = 1;
   system_config.num_active_metrics = 1;
 
   ASSERT_EQ(embedids_init(&context, &system_config), EMBEDIDS_OK);

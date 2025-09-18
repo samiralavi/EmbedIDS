@@ -11,37 +11,36 @@ EmbedIDS is a lightweight, extensible intrusion detection library designed for e
 
 // Allocate history buffer (user-managed memory)
 static embedids_metric_datapoint_t cpu_history[50];
+static embedids_algorithm_t cpu_algorithms[1];
 
-// Configure CPU monitoring with 80% threshold
-embedids_metric_config_t cpu_config = {
-    .metric = {
-        .name = "cpu_usage",
-        .type = EMBEDIDS_METRIC_TYPE_PERCENTAGE,
-        .history = cpu_history,
-        .max_history_size = 50,
-        .enabled = true
-    },
-    .algorithms = {{
-        .type = EMBEDIDS_ALGORITHM_THRESHOLD,
-        .enabled = true,
-        .config.threshold = {
-            .max_threshold.f32 = 80.0f,
-            .check_max = true
-        }
-    }},
-    .num_algorithms = 1
+embedids_metric_config_t cpu_config; // Will be initialized via helper
+
+// Initialize metric with dynamic capacities
+embedids_metric_init(&cpu_config,
+                     "cpu_usage",                // metric name
+                     EMBEDIDS_METRIC_TYPE_PERCENTAGE,
+                     cpu_history, 50,             // history buffer + capacity
+                     cpu_algorithms, 1);          // algorithms array + capacity
+
+// Configure threshold algorithm
+cpu_config.num_algorithms = 1;
+cpu_config.algorithms[0] = (embedids_algorithm_t){
+    .type = EMBEDIDS_ALGORITHM_THRESHOLD,
+    .enabled = true,
+    .config.threshold = {
+        .max_threshold.f32 = 80.0f,
+        .check_max = true,
+        .check_min = false
+    }
 };
 
 // Initialize context and system
-embedids_context_t context;
-memset(&context, 0, sizeof(context));
-
+embedids_context_t context; memset(&context, 0, sizeof(context));
 embedids_system_config_t system = {
     .metrics = &cpu_config,
-    .max_metrics = 1,
-    .num_active_metrics = 1
+    .num_active_metrics = 1,
+    .user_context = NULL
 };
-
 embedids_init(&context, &system);
 
 // Monitor in real-time
@@ -52,6 +51,12 @@ if (embedids_analyze_metric(&context, "cpu_usage") != EMBEDIDS_OK) {
     handle_intrusion_detected();
 }
 ```
+
+### Runtime Sizing Model
+Previous compile-time limits (e.g., EMBEDIDS_MAX_METRICS) were removed. You now:
+- Allocate arrays for metrics, history buffers, and algorithms yourself
+- Pass capacities into `embedids_metric_init`
+- Avoid rebuilding the library for different sizing requirements
 
 ## Architecture & Features
 

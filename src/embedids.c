@@ -22,20 +22,84 @@
 
 /* Helper function to find a metric by name */
 static embedids_metric_config_t *find_metric_config(const embedids_context_t *context, const char *metric_name) {
-  if (!context || !context->system_config) {
+  if (!context || !context->system_config || !metric_name) {
     return NULL;
   }
-
-  for (uint32_t i = 0; i < context->system_config->num_active_metrics;
-       i++) {
-    embedids_metric_config_t *config =
-        &context->system_config->metrics[i];
-    if (strncmp(config->metric.name, metric_name,
-                EMBEDIDS_MAX_METRIC_NAME_LEN) == 0) {
+  for (uint32_t i = 0; i < context->system_config->num_active_metrics; i++) {
+    embedids_metric_config_t *config = &context->system_config->metrics[i];
+    if (config->metric.name && strcmp(config->metric.name, metric_name) == 0) {
       return config;
     }
   }
   return NULL;
+}
+
+embedids_result_t embedids_metric_init(
+    embedids_metric_config_t *metric_config,
+    const char *name,
+    embedids_metric_type_t type,
+    embedids_metric_datapoint_t *history_buffer,
+    uint32_t history_capacity,
+    embedids_algorithm_t *algorithms_array,
+    uint32_t algorithms_capacity) {
+  if (!metric_config || !name || !history_buffer || history_capacity == 0) {
+    return EMBEDIDS_ERROR_INVALID_PARAM;
+  }
+  metric_config->metric.name = name;
+  metric_config->metric.type = type;
+  metric_config->metric.history = history_buffer;
+  metric_config->metric.max_history_size = history_capacity;
+  metric_config->metric.current_size = 0;
+  metric_config->metric.write_index = 0;
+  metric_config->metric.enabled = true;
+  metric_config->algorithms = algorithms_array;
+  metric_config->num_algorithms = 0;
+  metric_config->max_algorithms = algorithms_capacity;
+  return EMBEDIDS_OK;
+}
+
+embedids_result_t embedids_algorithm_init(embedids_algorithm_t *algorithm,
+                                          embedids_algorithm_type_t type,
+                                          bool enabled) {
+  if (!algorithm) {
+    return EMBEDIDS_ERROR_INVALID_PARAM;
+  }
+  memset(algorithm, 0, sizeof(*algorithm));
+  algorithm->type = type;
+  algorithm->enabled = enabled;
+  return EMBEDIDS_OK;
+}
+
+embedids_threshold_config_t embedids_threshold_config_init(const embedids_metric_value_t *min_ptr,
+                                                           const embedids_metric_value_t *max_ptr) {
+  embedids_threshold_config_t cfg;
+  memset(&cfg, 0, sizeof(cfg));
+  if (min_ptr) { cfg.min_threshold = *min_ptr; cfg.check_min = true; }
+  if (max_ptr) { cfg.max_threshold = *max_ptr; cfg.check_max = true; }
+  return cfg;
+}
+
+embedids_trend_config_t embedids_trend_config_init(uint32_t window_size,
+                                                   float max_slope,
+                                                   float max_variance,
+                                                   embedids_trend_t expected) {
+  embedids_trend_config_t cfg;
+  memset(&cfg, 0, sizeof(cfg));
+  cfg.window_size = window_size;
+  cfg.max_slope = max_slope;
+  cfg.max_variance = max_variance;
+  cfg.expected_trend = expected;
+  return cfg;
+}
+
+embedids_system_config_t embedids_system_config_init(embedids_metric_config_t *metrics_array,
+                                                     uint32_t num_metrics,
+                                                     void *user_ctx) {
+  embedids_system_config_t cfg;
+  cfg.metrics = metrics_array;
+  cfg.num_active_metrics = num_metrics;
+  cfg.user_context = user_ctx;
+  return cfg;
 }
 
 /* Built-in threshold algorithm implementation */
@@ -215,7 +279,10 @@ embedids_result_t embedids_analyze_metric(embedids_context_t *context, const cha
     return EMBEDIDS_ERROR_METRIC_DISABLED;
   }
 
-  // Run all algorithms for this metric
+  // Run all algorithms for this metric (if any)
+  if (config->algorithms == NULL || config->num_algorithms == 0) {
+    return EMBEDIDS_OK;
+  }
   for (uint32_t i = 0; i < config->num_algorithms; i++) {
     embedids_algorithm_t *algorithm = &config->algorithms[i];
     if (!algorithm->enabled) {
@@ -392,9 +459,7 @@ embedids_validate_config(const embedids_system_config_t *config) {
     return EMBEDIDS_ERROR_INVALID_PARAM;
   }
 
-  if (config->max_metrics == 0 || config->max_metrics > EMBEDIDS_MAX_METRICS) {
-    return EMBEDIDS_ERROR_CONFIG_INVALID;
-  }
+  // No explicit capacity field validation required (dynamic sizing model)
 
   return EMBEDIDS_OK;
 }

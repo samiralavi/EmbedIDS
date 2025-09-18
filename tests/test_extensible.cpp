@@ -32,20 +32,17 @@ protected:
                         uint32_t history_size,
                         embedids_custom_algorithm_fn algorithm_fn,
                         void* config = nullptr,
-                        void* context = nullptr) {
+                        void* context = nullptr,
+                        embedids_algorithm_t* algo_storage = nullptr) {
     memset(&metric_config, 0, sizeof(metric_config));
-    strncpy(metric_config.metric.name, name, EMBEDIDS_MAX_METRIC_NAME_LEN - 1);
-    metric_config.metric.type = type;
-    metric_config.metric.enabled = true;
-    metric_config.metric.history = history_buffer;
-    metric_config.metric.max_history_size = history_size;
-    metric_config.metric.current_size = 0;
-    metric_config.metric.write_index = 0;
+    embedids_algorithm_t local_algo[1];
+    if (!algo_storage) {
+      algo_storage = local_algo; // use stack temporary (copied into struct)
+    }
+    embedids_metric_init(&metric_config, name, type, history_buffer, history_size,
+                         algo_storage, 1);
     metric_config.num_algorithms = 1;
-    
-    // Configure custom algorithm
-    metric_config.algorithms[0].type = EMBEDIDS_ALGORITHM_CUSTOM;
-    metric_config.algorithms[0].enabled = true;
+    embedids_algorithm_init(&metric_config.algorithms[0], EMBEDIDS_ALGORITHM_CUSTOM, true);
     metric_config.algorithms[0].config.custom.function = algorithm_fn;
     metric_config.algorithms[0].config.custom.config = config;
     metric_config.algorithms[0].config.custom.context = context;
@@ -57,7 +54,6 @@ protected:
   embedids_result_t initializeWithMetric(embedids_metric_config_t* metric_config) {
     memset(&system_config, 0, sizeof(system_config));
     system_config.metrics = metric_config;
-    system_config.max_metrics = 1;
     system_config.num_active_metrics = 1;
     
     return embedids_init(&context, &system_config);
@@ -69,7 +65,6 @@ protected:
   embedids_result_t initializeWithMetrics(embedids_metric_config_t* metric_configs, uint32_t count) {
     memset(&system_config, 0, sizeof(system_config));
     system_config.metrics = metric_configs;
-    system_config.max_metrics = count;
     system_config.num_active_metrics = count;
     
     return embedids_init(&context, &system_config);
@@ -483,26 +478,19 @@ TEST_F(EmbedIDSExtensibleTest, MultipleCustomAlgorithmsOnSingleMetric) {
   };
   
   // Setup metric with multiple custom algorithms
-  memset(&metric_config, 0, sizeof(metric_config));
-  strncpy(metric_config.metric.name, "multi_algo", EMBEDIDS_MAX_METRIC_NAME_LEN - 1);
-  metric_config.metric.type = EMBEDIDS_METRIC_TYPE_FLOAT;
-  metric_config.metric.enabled = true;
-  metric_config.metric.history = history_buffer;
-  metric_config.metric.max_history_size = 15;
-  metric_config.metric.current_size = 0;
-  metric_config.metric.write_index = 0;
+  embedids_algorithm_t algo_store[2];
+  embedids_metric_init(&metric_config, "multi_algo", EMBEDIDS_METRIC_TYPE_FLOAT,
+                       history_buffer, 15, algo_store, 2);
   metric_config.num_algorithms = 2;
   
   // First algorithm: Pattern detector
-  metric_config.algorithms[0].type = EMBEDIDS_ALGORITHM_CUSTOM;
-  metric_config.algorithms[0].enabled = true;
+  embedids_algorithm_init(&metric_config.algorithms[0], EMBEDIDS_ALGORITHM_CUSTOM, true);
   metric_config.algorithms[0].config.custom.function = pattern_detector_algorithm;
   metric_config.algorithms[0].config.custom.config = nullptr;
   metric_config.algorithms[0].config.custom.context = &pattern_ctx;
   
   // Second algorithm: Variance detector
-  metric_config.algorithms[1].type = EMBEDIDS_ALGORITHM_CUSTOM;
-  metric_config.algorithms[1].enabled = true;
+  embedids_algorithm_init(&metric_config.algorithms[1], EMBEDIDS_ALGORITHM_CUSTOM, true);
   metric_config.algorithms[1].config.custom.function = variance_detector_algorithm;
   metric_config.algorithms[1].config.custom.config = nullptr;
   metric_config.algorithms[1].config.custom.context = &variance_ctx;
@@ -647,20 +635,23 @@ TEST_F(EmbedIDSExtensibleTest, MultipleMetricsWithCustomAlgorithms) {
   embedids_metric_config_t metrics[3];
   
   // Setup CPU metric with pattern detector
+  embedids_algorithm_t cpu_algo_store[1];
   setupCustomMetric(metrics[0], cpu_history, "cpu_usage", 
                    EMBEDIDS_METRIC_TYPE_FLOAT, 10, 
-                   pattern_detector_algorithm, nullptr, &cpu_ctx);
+                   pattern_detector_algorithm, nullptr, &cpu_ctx, cpu_algo_store);
   
   // Setup memory metric with rate change detector
   float max_memory_rate = 15.0f;
+  embedids_algorithm_t memory_algo_store[1];
   setupCustomMetric(metrics[1], memory_history, "memory_usage", 
                    EMBEDIDS_METRIC_TYPE_FLOAT, 10, 
-                   rate_change_algorithm, &max_memory_rate, &memory_ctx);
+                   rate_change_algorithm, &max_memory_rate, &memory_ctx, memory_algo_store);
   
   // Setup network metric with variance detector
+  embedids_algorithm_t network_algo_store[1];
   setupCustomMetric(metrics[2], network_history, "network_latency", 
                    EMBEDIDS_METRIC_TYPE_FLOAT, 10, 
-                   variance_detector_algorithm, nullptr, &network_ctx);
+                   variance_detector_algorithm, nullptr, &network_ctx, network_algo_store);
 
   ASSERT_EQ(initializeWithMetrics(metrics, 3), EMBEDIDS_OK);
 
